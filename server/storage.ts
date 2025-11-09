@@ -207,7 +207,6 @@ export interface IStorage {
     status?: string,
     tenantDb?: any,
     salesChannel?: string,
-    storeCode?: string,
   ): Promise<Order[]>;
   getOrder(id: number, tenantDb?: any): Promise<Order | undefined>;
   getOrderByNumber(
@@ -245,7 +244,7 @@ export interface IStorage {
   ): Promise<StoreSettings>;
 
   // Suppliers
-  getSuppliers(tenantDb?: any): Promise<any[]>;
+  getSuppliers(tenantDb?: any): Promise<any>;
   getSupplier(id: number, tenantDb?: any): Promise<any>;
   getSuppliersByStatus(status: string, tenantDb?: any): Promise<any>;
   searchSuppliers(query: string, tenantDb?: any): Promise<any>;
@@ -278,7 +277,6 @@ export interface IStorage {
     points: number,
     tenantDb?: any,
   ): Promise<Customer | undefined>;
-  getNextCustomerId(tenantDb?: any): Promise<string>;
 
   // Point Management
   getCustomerPoints(
@@ -478,13 +476,11 @@ interface Category {
   id: number;
   name: string;
   isActive: boolean;
-  storeCode?: string | null;
 }
 
 interface InsertCategory {
   name: string;
   isActive?: boolean;
-  storeCode?: string | null;
 }
 
 interface Product {
@@ -506,7 +502,6 @@ interface Product {
   taxRateName: string; // Added field
   zone: string | null; // Added zone field
   unit: string | null; // Added unit field
-  storeCode?: string | null;
 }
 
 interface InsertProduct {
@@ -526,7 +521,6 @@ interface InsertProduct {
   taxRateName?: string; // Added for explicit tax rate name input
   zone?: string | null; // Added zone field
   unit?: string | null; // Added unit field
-  storeCode?: string | null;
 }
 
 interface Transaction {
@@ -546,7 +540,6 @@ interface Transaction {
   paymentStatus: string;
   createdAt: string;
   updatedAt: string;
-  storeCode?: string | null;
 }
 
 interface InsertTransaction {
@@ -564,7 +557,6 @@ interface InsertTransaction {
   paymentMethod: string;
   paymentStatus: string;
   createdAt?: Date;
-  storeCode?: string | null;
 }
 
 interface TransactionItem {
@@ -600,7 +592,6 @@ interface Employee {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
-  storeCode?: string | null;
 }
 
 interface InsertEmployee {
@@ -611,7 +602,6 @@ interface InsertEmployee {
   position: string;
   salary: number;
   isActive?: boolean;
-  storeCode?: string | null;
 }
 
 interface AttendanceRecord {
@@ -646,7 +636,6 @@ interface Order {
   orderNumber: string;
   tableId: number | null;
   employeeId: number | null;
-  customerId: number | null;
   status: string;
   customerName: string | null;
   customerCount: number | null;
@@ -669,17 +658,14 @@ interface Order {
   symbol?: string | null;
   priceIncludeTax?: boolean; // Added for clarity
   isPaid?: boolean; // Added for isPaid field
-  storeCode?: string | null;
 }
 
 interface InsertOrder {
   orderNumber?: string;
   tableId?: number | null;
   employeeId?: number | null;
-  customerId?: number | null;
   status: string;
   customerName?: string | null;
-  customerPhone?: string | null;
   customerCount?: number | null;
   subtotal: number;
   tax: number;
@@ -696,10 +682,8 @@ interface InsertOrder {
   invoiceId?: number | null;
   templateNumber?: string | null;
   symbol?: string | null;
-  customerTaxCode?: string | null; // Added for customerTaxCode
   priceIncludeTax?: boolean; // Added for clarity
   isPaid?: boolean; // Added for isPaid field
-  storeCode?: string | null;
 }
 
 interface OrderItem {
@@ -732,6 +716,7 @@ interface StoreSettings {
   id: number;
   storeName: string;
   storeCode: string;
+  domain?: string; // Added domain field
   businessType: string;
   openTime: string;
   closeTime: string;
@@ -752,12 +737,12 @@ interface StoreSettings {
   defaultZone?: string; // Added for default zone
   floorPrefix?: string; // Added for floor prefix
   zonePrefix?: string; // Added for zone prefix
-  domain?: string | null; // Added for domain
 }
 
 interface InsertStoreSettings {
   storeName?: string;
   storeCode?: string;
+  domain?: string; // Added domain field
   businessType?: string;
   openTime?: string;
   closeTime?: string;
@@ -776,7 +761,6 @@ interface InsertStoreSettings {
   defaultZone?: string; // Added for default zone
   floorPrefix?: string; // Added for floor prefix
   zonePrefix?: string; // Added for zone prefix
-  domain?: string | null; // Added for domain
 }
 
 interface Supplier {
@@ -790,7 +774,6 @@ interface Supplier {
   status: string;
   createdAt: string;
   updatedAt: string;
-  storeCode?: string | null;
 }
 
 interface InsertSupplier {
@@ -801,7 +784,6 @@ interface InsertSupplier {
   email?: string;
   address?: string;
   status?: string;
-  storeCode?: string | null;
 }
 
 interface Customer {
@@ -817,7 +799,6 @@ interface Customer {
   membershipLevel: string;
   createdAt: string;
   updatedAt: string;
-  storeCode?: string | null;
 }
 
 interface InsertCustomer {
@@ -830,7 +811,6 @@ interface InsertCustomer {
   totalSpent?: string;
   points?: number;
   membershipLevel?: string;
-  storeCode?: string | null;
 }
 
 interface PointTransaction {
@@ -926,10 +906,6 @@ interface PrinterConfig {
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
-  copies?: number; // Added for copies
-  floor?: string; // Added for floor
-  zone?: string; // Added for zone
-  storeCode?: string | null; // Added for storeCode
 }
 
 export class DatabaseStorage implements IStorage {
@@ -937,12 +913,10 @@ export class DatabaseStorage implements IStorage {
   private db: any;
   private tenant: string | null = null; // Property to store tenant context if needed
   private dbManager: any;
-  private storeCode: string | null = null; // Add storeCode property
 
-  constructor(storeCode?: string) {
+  constructor() {
     this.db = db;
     this.dbManager = dbManager;
-    this.storeCode = storeCode || null;
   }
 
   // Expense Voucher methods
@@ -967,52 +941,35 @@ export class DatabaseStorage implements IStorage {
     const database = tenantDb || this.getSafeDatabase("createExpenseVoucher");
     try {
       console.log(
-        "✅ Storage: Creating expense voucher with receiverName:",
+        "Storage: Creating expense voucher - receiverName value:",
         voucherData.receiverName,
       );
-      console.log(
-        "✅ Storage: Full voucherData:",
-        JSON.stringify(voucherData, null, 2),
-      );
-
-      // Preserve the exact receiverName value - do NOT convert to null
-      const receiverName = voucherData.receiverName || null;
-
-      console.log("✅ Storage: Using receiverName value:", receiverName);
-      console.log("✅ Storage: receiverName type:", typeof receiverName);
 
       const result = await database.execute(sql`
         INSERT INTO expense_vouchers (
           voucher_number, date, amount, account, recipient,
           receiver_name, phone, category, description,
-          supplier_id, created_at, updated_at
+          created_at, updated_at
         ) VALUES (
           ${voucherData.voucherNumber},
           ${voucherData.date},
           ${voucherData.amount},
           ${voucherData.account},
           ${voucherData.recipient},
-          ${receiverName},
+          ${voucherData.receiverName || null},
           ${voucherData.phone || null},
           ${voucherData.category},
           ${voucherData.description || null},
-          ${voucherData.supplierId || null},
           ${new Date()},
           ${new Date()}
         ) RETURNING *
       `);
 
-      const createdVoucher = result.rows[0];
       console.log(
-        "✅ Storage: Expense voucher saved - receiver_name in DB:",
-        createdVoucher.receiver_name,
+        "Storage: Expense voucher created with receiverName:",
+        result.rows[0].receiver_name,
       );
-      console.log(
-        "✅ Storage: Full created voucher:",
-        JSON.stringify(createdVoucher, null, 2),
-      );
-
-      return createdVoucher;
+      return result.rows[0];
     } catch (error) {
       console.error("Error creating expense voucher:", error);
       throw error;
@@ -1058,9 +1015,9 @@ export class DatabaseStorage implements IStorage {
   ): Promise<void> {
     const database = tenantDb || this.getSafeDatabase("deleteExpenseVoucher");
     try {
-      await database
-        .delete(expenseVouchers)
-        .where(eq(expenseVouchers.id, parseInt(id)));
+      await database.execute(sql`
+        DELETE FROM expense_vouchers WHERE id = ${id}
+      `);
     } catch (error) {
       console.error("Error deleting expense voucher:", error);
       throw error;
@@ -1070,11 +1027,11 @@ export class DatabaseStorage implements IStorage {
   async getExpenseVouchers(tenantDb?: any): Promise<any[]> {
     const database = tenantDb || this.getSafeDatabase("getExpenseVouchers");
     try {
-      const result = await database
-        .select()
-        .from(expenseVouchers)
-        .orderBy(desc(expenseVouchers.createdAt));
-      return result || [];
+      const result = await database.execute(sql`
+        SELECT * FROM expense_vouchers
+        ORDER BY created_at DESC
+      `);
+      return result.rows || [];
     } catch (error) {
       console.error("Error fetching expense vouchers:", error);
       return [];
@@ -1142,8 +1099,9 @@ export class DatabaseStorage implements IStorage {
     voucherData: any,
     tenantDb?: any,
   ): Promise<any> {
-    const database = tenantDb || this.getSafeDatabase("updateExpenseVoucher");
     try {
+      const database = tenantDb || this.getSafeDatabase("updateExpenseVoucher");
+
       console.log("Storage: Updating expense voucher with data:", voucherData);
 
       const [voucher] = await database
@@ -1171,8 +1129,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteExpenseVoucher(id: string, tenantDb?: any): Promise<void> {
-    const database = tenantDb || this.getSafeDatabase("deleteExpenseVoucher");
     try {
+      const database = tenantDb || this.getSafeDatabase("deleteExpenseVoucher");
       await database
         .delete(expenseVouchers)
         .where(eq(expenseVouchers.id, parseInt(id)));
@@ -1836,20 +1794,6 @@ export class DatabaseStorage implements IStorage {
     );
 
     try {
-      // Get storeCode from settings if not provided
-      let storeCode = null;
-      if (!insertTransaction.storeCode) {
-        try {
-          const [storeSettingsData] = await database
-            .select({ storeCode: storeSettings.storeCode })
-            .from(storeSettings)
-            .limit(1);
-          storeCode = storeSettingsData?.storeCode || null;
-        } catch (error) {
-          console.warn("Could not fetch storeCode from settings");
-        }
-      }
-
       // Create the main transaction record
       const [transaction] = await database
         .insert(transactions)
@@ -1857,7 +1801,6 @@ export class DatabaseStorage implements IStorage {
           ...insertTransaction,
           amountReceived: insertTransaction.amountReceived || null,
           change: insertTransaction.change || null,
-          storeCode: insertTransaction.storeCode || storeCode,
         })
         .returning();
 
@@ -2063,69 +2006,37 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  // Generate next customer ID - safely handle duplicates
+  // Generate next customer ID
   async getNextCustomerId(tenantDb?: any): Promise<string> {
     const database = tenantDb || this.getSafeDatabase("getNextCustomerId");
     try {
-      // Lấy tất cả customerId bắt đầu bằng 'CUST' và sắp xếp giảm dần
+      // Get all customer IDs that match the CUST pattern and extract numbers
       const allCustomers = await database
         .select({ customerId: customers.customerId })
         .from(customers)
-        .where(like(customers.customerId, "CUST%"))
-        .orderBy(desc(customers.customerId));
+        .where(like(customers.customerId, "CUST%"));
 
-      // Nếu chưa có khách hàng nào, bắt đầu từ CUST001
       if (allCustomers.length === 0) {
         return "CUST001";
       }
 
-      // Tìm mã lớn nhất thực sự có dạng CUST###
-      let maxNumber = 0;
+      // Extract all numbers from existing customer IDs
+      const existingNumbers = allCustomers
+        .map((customer) => {
+          const match = customer.customerId.match(/CUST(\d+)/);
+          return match ? parseInt(match[1], 10) : 0;
+        })
+        .filter((num) => num > 0)
+        .sort((a, b) => b - a); // Sort descending
 
-      for (const { customerId } of allCustomers) {
-        const match = /^CUST(\d+)$/.exec(customerId);
-        if (match) {
-          const number = parseInt(match[1], 10);
-          if (number > maxNumber) {
-            maxNumber = number;
-          }
-        }
-      }
+      // Find the highest number and increment
+      const highestNumber = existingNumbers[0] || 0;
+      const nextNumber = highestNumber + 1;
 
-      // Tăng số tiếp theo
-      const nextNumber = maxNumber + 1;
-
-      // Kiểm tra xem customerId này đã tồn tại chưa (phòng trường hợp race condition)
-      let candidateId = `CUST${nextNumber.toString().padStart(3, "0")}`;
-      let attempts = 0;
-      const maxAttempts = 100;
-
-      while (attempts < maxAttempts) {
-        const existing = await database
-          .select({ customerId: customers.customerId })
-          .from(customers)
-          .where(eq(customers.customerId, candidateId))
-          .limit(1);
-
-        if (existing.length === 0) {
-          // ID này chưa tồn tại, có thể sử dụng
-          return candidateId;
-        }
-
-        // ID đã tồn tại, thử ID tiếp theo
-        attempts++;
-        const newNumber = maxNumber + attempts + 1;
-        candidateId = `CUST${newNumber.toString().padStart(3, "0")}`;
-      }
-
-      // Nếu vẫn không tìm được ID sau maxAttempts lần thử, dùng timestamp
-      const timestamp = Date.now().toString().slice(-6);
-      return `CUST${timestamp}`;
+      return `CUST${nextNumber.toString().padStart(3, "0")}`;
     } catch (error) {
       console.error("Error generating next customer ID:", error);
-      // Fallback: sử dụng timestamp nếu có lỗi
-      const timestamp = Date.now().toString().slice(-6);
-      return `CUST${timestamp}`;
+      return "CUST001";
     }
   }
 
@@ -2607,7 +2518,6 @@ export class DatabaseStorage implements IStorage {
     status?: string,
     tenantDb?: any,
     salesChannel?: string,
-    storeCode?: string,
   ): Promise<any[]> {
     try {
       const database = tenantDb || this.getSafeDatabase("getOrders");
@@ -2628,19 +2538,13 @@ export class DatabaseStorage implements IStorage {
         conditions.push(eq(orders.salesChannel, salesChannel));
       }
 
-      // Always filter by storeCode if provided
-      if (storeCode) {
-        conditions.push(eq(orders.storeCode, storeCode));
-        console.log(`Storage: Filtering orders by storeCode: ${storeCode}`);
-      }
-
       if (conditions.length > 0) {
         query = query.where(and(...conditions));
       }
 
       const result = await query.orderBy(desc(orders.orderedAt));
       console.log(
-        `Storage: getOrders returned ${result?.length || 0} orders${salesChannel ? ` for channel: ${salesChannel}` : ""}${storeCode ? ` for store: ${storeCode}` : ""}`,
+        `Storage: getOrders returned ${result?.length || 0} orders${salesChannel ? ` for channel: ${salesChannel}` : ""}`,
       );
       return result || [];
     } catch (error) {
@@ -2691,19 +2595,13 @@ export class DatabaseStorage implements IStorage {
 
     // Get store settings to determine price_include_tax if not provided
     let priceIncludeTax = orderData.priceIncludeTax;
-    let storeCodeFromSettings = null;
-
-    if (priceIncludeTax === undefined || !orderData.storeCode) {
+    if (priceIncludeTax === undefined) {
       try {
-        const [storeSettingsData] = await database
-          .select({
-            priceIncludesTax: storeSettings.priceIncludesTax,
-            storeCode: storeSettings.storeCode,
-          })
+        const [storeSettings] = await database
+          .select({ priceIncludesTax: storeSettings.priceIncludesTax })
           .from(storeSettings)
           .limit(1);
-        priceIncludeTax = storeSettingsData?.priceIncludesTax || false;
-        storeCodeFromSettings = storeSettingsData?.storeCode || null;
+        priceIncludeTax = storeSettings?.priceIncludesTax || false;
       } catch (error) {
         console.warn(
           "Could not fetch store settings, defaulting priceIncludeTax to false",
@@ -2720,7 +2618,6 @@ export class DatabaseStorage implements IStorage {
       total: orderData.total,
       salesChannel: orderData.salesChannel,
       priceIncludeTax: priceIncludeTax,
-      storeCode: orderData.storeCode || storeCodeFromSettings,
       itemsCount: items.length,
     });
 
@@ -2739,10 +2636,8 @@ export class DatabaseStorage implements IStorage {
       orderNumber: orderData.orderNumber,
       tableId: orderData.tableId,
       employeeId: orderData.employeeId || null,
-      customerId: orderData.customerId || null,
       status: orderData.status,
       customerName: orderData.customerName,
-      customerPhone: orderData.customerPhone,
       customerCount: orderData.customerCount,
       subtotal: orderData.subtotal
         ? parseFloat(orderData.subtotal.toString())
@@ -2756,23 +2651,24 @@ export class DatabaseStorage implements IStorage {
       paymentStatus: orderData.paymentStatus,
       einvoiceStatus: orderData.einvoiceStatus || 0,
       salesChannel: orderData.salesChannel,
-      customerTaxCode: orderData.customerTaxCode,
       notes: orderData.notes,
       paidAt: orderData.paidAt,
       orderedAt: new Date(),
-      priceIncludeTax: priceIncludeTax,
-      storeCode: orderData.storeCode || storeCodeFromSettings || null,
     };
 
-    console.log(`💾 Saving order with storeCode: ${orderInsertData.storeCode}`);
+    console.log(`📝 Final order insert data:`, orderInsertData);
 
     const [order] = await database
       .insert(orders)
-      .values(orderInsertData)
+      .values({
+        ...orderData,
+        priceIncludeTax: priceIncludeTax,
+        orderedAt: new Date(),
+      })
       .returning();
 
     console.log(
-      `Storage: Order created with ID ${order.id}, sales channel: ${order.salesChannel}, storeCode: ${order.storeCode}`,
+      `Storage: Order created with ID ${order.id}, sales channel: ${order.salesChannel}`,
     );
 
     // Create order items
@@ -2840,11 +2736,8 @@ export class DatabaseStorage implements IStorage {
       orderNumber: string;
       tableId: number | null;
       employeeId: number | null;
-      customerId: number | null;
       status: string;
       customerName: string;
-      customerPhone: string;
-      customerTaxCode: string;
       customerCount: number;
       subtotal: string;
       tax: string;
@@ -2901,14 +2794,10 @@ export class DatabaseStorage implements IStorage {
       `✅ Storage: Saving exact frontend values without any calculation or modification`,
     );
 
-    let updateData: any = {
+    const updateData: any = {
       status: orderData.status,
       paymentMethod: orderData.paymentMethod,
       paymentStatus: orderData.paymentStatus,
-      customerId: orderData.customerId,
-      customerName: orderData.customerName,
-      customerPhone: orderData.customerPhone,
-      customerTaxCode: orderData.customerTaxCode,
       isPaid:
         orderData.isPaid !== undefined
           ? orderData.isPaid
@@ -2947,10 +2836,6 @@ export class DatabaseStorage implements IStorage {
           ? orderData.paidAt
           : existingOrder.paidAt,
     };
-
-    if (existingOrder.paymentStatus !== "paid") {
-      updateData.updatedAt = new Date();
-    }
 
     console.log("🔍 Storage: Final update data analysis:", {
       orderId: id,
@@ -3753,24 +3638,7 @@ export class DatabaseStorage implements IStorage {
   // Suppliers
   async getSuppliers(tenantDb?: any): Promise<any[]> {
     const database = tenantDb || this.getSafeDatabase("getSuppliers");
-    // Add storeCode filter here based on the logged-in user's storeCode
-    // For now, returning all suppliers without filtering by storeCode
-    const storeCode = null; // Placeholder for actual storeCode retrieval
-    console.log(
-      `Storage: Fetching all suppliers (storeCode: ${storeCode || "N/A"})`,
-    );
-
-    // If storeCode is available, add it to the where clause
-    if (storeCode) {
-      return await database
-        .select()
-        .from(suppliers)
-        .where(eq(suppliers.storeCode, storeCode))
-        .orderBy(suppliers.name);
-    } else {
-      // Fallback to returning all if storeCode is not available (e.g., during initial setup)
-      return await database.select().from(suppliers).orderBy(suppliers.name);
-    }
+    return await database.select().from(suppliers).orderBy(suppliers.name);
   }
 
   async getSupplier(id: number, tenantDb?: any): Promise<any> {
@@ -3784,60 +3652,32 @@ export class DatabaseStorage implements IStorage {
 
   async getSuppliersByStatus(status: string, tenantDb?: any): Promise<any> {
     const database = tenantDb || this.getSafeDatabase("getSuppliersByStatus");
-    // Add storeCode filter here
-    const storeCode = null; // Placeholder
-    if (storeCode) {
-      return await database
-        .select()
-        .from(suppliers)
-        .where(
-          and(eq(suppliers.status, status), eq(suppliers.storeCode, storeCode)),
-        )
-        .orderBy(suppliers.name);
-    } else {
-      return await database
-        .select()
-        .from(suppliers)
-        .where(eq(suppliers.status, status))
-        .orderBy(suppliers.name);
-    }
+    return await database
+      .select()
+      .from(suppliers)
+      .where(eq(suppliers.status, status))
+      .orderBy(suppliers.name);
   }
 
   async searchSuppliers(query: string, tenantDb?: any): Promise<any> {
     const database = tenantDb || this.getSafeDatabase("searchSuppliers");
-    // Add storeCode filter here
-    const storeCode = null; // Placeholder
-    const conditions = [
-      or(
-        ilike(suppliers.name, `%${query}%`),
-        ilike(suppliers.code, `%${query}%`),
-        ilike(suppliers.contactPerson, `%${query}%`),
-      ),
-    ];
-    if (storeCode) {
-      conditions.push(eq(suppliers.storeCode, storeCode));
-    }
     return await database
       .select()
       .from(suppliers)
-      .where(and(...conditions))
+      .where(
+        or(
+          ilike(suppliers.name, `%${query}%`),
+          ilike(suppliers.code, `%${query}%`),
+          ilike(suppliers.contactPerson, `%${query}%`),
+        ),
+      )
       .orderBy(suppliers.name);
   }
 
   async createSupplier(data: InsertSupplier, tenantDb?: any): Promise<any> {
     const database = tenantDb || this.getSafeDatabase("createSupplier");
-
-    console.log(`📝 Creating supplier with storeCode: ${data.storeCode}`);
-
-    const [supplier] = await database
-      .insert(suppliers)
-      .values(data)
-      .returning();
-
-    console.log(
-      `✅ Supplier created: ${supplier.name} (storeCode: ${supplier.storeCode})`,
-    );
-    return supplier;
+    const [result] = await database.insert(suppliers).values(data).returning();
+    return result;
   }
 
   async updateSupplier(
@@ -3945,77 +3785,24 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createCustomer(
-    insertCustomer: InsertCustomer,
+    customerData: InsertCustomer,
     tenantDb?: any,
   ): Promise<Customer> {
     const database = tenantDb || this.getSafeDatabase("createCustomer");
-    try {
-      // Generate unique customer ID
-      const nextCustomerId = await this.getNextCustomerId(tenantDb);
-
-      const [customer] = await database
-        .insert(customers)
-        .values({
-          ...insertCustomer,
-          customerId: nextCustomerId,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .returning();
-
-      return customer;
-    } catch (error: any) {
-      console.error("Error creating customer:", error);
-
-      // Handle duplicate key error by fixing sequence
-      if (error?.code === "23505" && error?.constraint === "customers_pkey") {
-        console.log(
-          "🔧 Fixing customers sequence due to duplicate key error...",
-        );
-        try {
-          // Get max ID from customers table
-          const maxIdResult = await database.execute(
-            sql`SELECT COALESCE(MAX(id), 0) as max_id FROM customers`,
-          );
-          const maxId = maxIdResult.rows[0]?.max_id || 0;
-          const newSeqValue = maxId + 100; // Set sequence well above current max
-
-          console.log(
-            `📊 Current max customer ID: ${maxId}, setting sequence to: ${newSeqValue}`,
-          );
-
-          // Reset sequence
-          await database.execute(
-            sql`SELECT setval('customers_id_seq', ${newSeqValue}, true)`,
-          );
-          console.log(`✅ Customers sequence reset to ${newSeqValue}`);
-
-          // Retry the insert
-          console.log("🔄 Retrying customer creation...");
-
-          // Generate new customer ID after sequence fix
-          const retryCustomerId = await this.getNextCustomerId(tenantDb);
-
-          const [customer] = await database
-            .insert(customers)
-            .values({
-              ...insertCustomer,
-              customerId: retryCustomerId,
-              createdAt: new Date(),
-              updatedAt: new Date(),
-            })
-            .returning();
-
-          console.log("✅ Customer created successfully on retry:", customer);
-          return customer;
-        } catch (retryError) {
-          console.error("❌ Failed to fix sequence and retry:", retryError);
-          throw retryError;
-        }
-      }
-
-      throw error;
+    // Generate customer ID if not provided
+    if (!customerData.customerId) {
+      const count = await database
+        .select({ count: sql<number>`count(*)` })
+        .from(customers);
+      const customerCount = count[0]?.count || 0;
+      customerData.customerId = `CUST${String(customerCount + 1).padStart(3, "0")}`;
     }
+
+    const [result] = await database
+      .insert(customers)
+      .values(customerData)
+      .returning();
+    return result;
   }
 
   async updateCustomer(
@@ -4352,7 +4139,7 @@ export class DatabaseStorage implements IStorage {
       const templates = await database
         .select()
         .from(invoiceTemplates)
-        .where(eq(invoiceTemplates.isActive, true))
+        .where(eq(invoiceTemplates.isDefault, true))
         .orderBy(desc(invoiceTemplates.id));
       return templates;
     } catch (error) {
@@ -4749,7 +4536,6 @@ export class DatabaseStorage implements IStorage {
           zone: printerConfigs.zone,
           createdAt: printerConfigs.createdAt,
           updatedAt: printerConfigs.updatedAt,
-          storeCode: printerConfigs.storeCode,
         })
         .from(printerConfigs)
         .orderBy(printerConfigs.id);
@@ -5391,58 +5177,99 @@ export class DatabaseStorage implements IStorage {
       endDate?: string;
       page?: number;
       limit?: number;
-      storeCode?: string;
+      storeFilter?: string[];
     } = {},
     tenantDb?: any,
   ): Promise<PurchaseReceipt[]> {
+    const database = tenantDb || this.getSafeDatabase("getPurchaseReceipts");
+
     try {
-      const database = tenantDb || this.getSafeDatabase("getPurchaseReceipts");
+      console.log(`🔍 Fetching purchase receipts with options:`, options);
 
-      console.log("📋 Executing purchase receipts query with Drizzle");
-
-      // Build WHERE conditions
+      // Build query conditions using Drizzle
       const conditions = [];
+      const {
+        supplierId,
+        status,
+        search,
+        startDate,
+        endDate,
+        page = 1,
+        limit,
+        storeFilter,
+      } = options;
 
-      // Date range filtering
-      if (options?.startDate) {
-        const startDate = new Date(options.startDate);
-        startDate.setHours(0, 0, 0, 0);
-        console.log(`📅 Start date filtering: ${startDate.toISOString()}`);
+      if (supplierId) {
+        conditions.push(eq(purchaseReceipts.supplierId, supplierId));
+      }
+
+      if (status && status !== "all") {
+        conditions.push(eq(purchaseReceipts.status, status));
+      }
+
+      if (search) {
         conditions.push(
-          gte(
-            purchaseReceipts.purchaseDate,
-            startDate.toISOString().split("T")[0],
+          or(
+            ilike(purchaseReceipts.receiptNumber, `%${search}%`),
+            ilike(purchaseReceipts.notes, `%${search}%`),
           ),
         );
       }
 
-      if (options?.endDate) {
-        const endDate = new Date(options.endDate);
-        endDate.setHours(23, 59, 59, 999);
-        console.log(`📅 End date filtering: ${endDate.toISOString()}`);
+      if (storeFilter && storeFilter.length > 0) {
+        conditions.push(inArray(purchaseReceipts.storeCode, storeFilter));
+      }
+
+      if (startDate && endDate) {
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+
+        console.log("📅 Date filtering for purchase receipts:", {
+          startDate,
+          endDate,
+          startParsed: start,
+          endParsed: end,
+        });
+
         conditions.push(
-          lte(
-            purchaseReceipts.purchaseDate,
-            endDate.toISOString().split("T")[0],
+          and(
+            gte(purchaseReceipts.purchaseDate, start),
+            lte(purchaseReceipts.purchaseDate, end),
+          ),
+        );
+      } else if (startDate) {
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        console.log("📅 Start date filtering:", start);
+        conditions.push(gte(purchaseReceipts.purchaseDate, start));
+      } else if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        console.log("📅 End date filtering:", end);
+        conditions.push(lte(purchaseReceipts.purchaseDate, end));
+      }
+
+      // Filter by supplier name (case-insensitive) - use direct search term
+      if (options?.supplierName && options.supplierName.trim()) {
+        const searchTerm = options.supplierName.trim();
+        console.log(`🔍 Applying supplier name filter: "${searchTerm}"`);
+
+        // Add search condition for supplier name via search parameter
+        conditions.push(
+          or(
+            ilike(purchaseReceipts.receiptNumber, `%${searchTerm}%`),
+            sql`EXISTS (
+              SELECT 1 FROM suppliers s
+              WHERE s.id = ${purchaseReceipts.supplierId}
+              AND LOWER(s.name) LIKE LOWER(${`%${searchTerm}%`})
+            )`,
           ),
         );
       }
 
-      // Supplier name filtering
-      if (options?.supplierName && options.supplierName.trim() !== "") {
-        console.log(`🔍 Filtering by supplier name: ${options.supplierName}`);
-        // We'll need to join with suppliers table for this
-      }
-
-      // Search filtering (receipt number)
-      if (options?.search && options.search.trim() !== "") {
-        console.log(`🔍 Searching by receipt number: ${options.search}`);
-        conditions.push(
-          like(purchaseReceipts.receiptNumber, `%${options.search}%`),
-        );
-      }
-
-      // Build query
+      // Build the query using Drizzle
       let query = database
         .select({
           id: purchaseReceipts.id,
@@ -5451,65 +5278,49 @@ export class DatabaseStorage implements IStorage {
           employeeId: purchaseReceipts.employeeId,
           purchaseDate: purchaseReceipts.purchaseDate,
           actualDeliveryDate: purchaseReceipts.actualDeliveryDate,
-          purchaseType: purchaseReceipts.purchaseType,
           subtotal: purchaseReceipts.subtotal,
           tax: purchaseReceipts.tax,
           total: purchaseReceipts.total,
-          isPaid: purchaseReceipts.isPaid,
-          paymentMethod: purchaseReceipts.paymentMethod,
-          paymentAmount: purchaseReceipts.paymentAmount,
           notes: purchaseReceipts.notes,
-          storeCode: purchaseReceipts.storeCode,
           createdAt: purchaseReceipts.createdAt,
           updatedAt: purchaseReceipts.updatedAt,
+          supplierName: suppliers.name,
+          supplierCode: suppliers.code,
+          supplierPhone: suppliers.phone,
+          supplierEmail: suppliers.email,
+          purchaseType: purchaseReceipts.purchaseType,
+          // Employee information
+          employeeName: employees.name,
+          employeeCode: employees.employeeId,
+          isPaid: purchaseReceipts.isPaid, // Include isPaid
+          paymentMethod: purchaseReceipts.paymentMethod,
+          paymentAmount: purchaseReceipts.paymentAmount,
           storeCode: purchaseReceipts.storeCode,
-          supplier: {
-            id: suppliers.id,
-            name: suppliers.name,
-            code: suppliers.code,
-          },
         })
         .from(purchaseReceipts)
-        .leftJoin(suppliers, eq(purchaseReceipts.supplierId, suppliers.id));
+        .leftJoin(suppliers, eq(purchaseReceipts.supplierId, suppliers.id))
+        .leftJoin(employees, eq(purchaseReceipts.employeeId, employees.id));
 
-      // Apply WHERE conditions
       if (conditions.length > 0) {
         query = query.where(and(...conditions));
       }
 
-      // Apply supplier name filter if provided
-      if (options?.supplierName && options.supplierName.trim() !== "") {
-        query = query.where(like(suppliers.name, `%${options.supplierName}%`));
-      }
-
-      // Order by creation date descending
       query = query.orderBy(desc(purchaseReceipts.createdAt));
 
-      // Apply limit if provided
-      if (options?.limit) {
-        query = query.limit(options.limit);
+      if (limit) {
+        const offset = (page - 1) * limit;
+        query = query.limit(limit).offset(offset);
       }
 
-      const results = await query;
+      console.log(`📋 Executing purchase receipts query with Drizzle`);
 
-      console.log(`✅ Found ${results.length} purchase receipts`);
+      // Execute the query
+      const receipts = await query;
 
-      // Fetch items for each receipt
-      const receiptsWithItems = await Promise.all(
-        results.map(async (receipt) => {
-          const items = await database
-            .select()
-            .from(purchaseReceiptItems)
-            .where(eq(purchaseReceiptItems.purchaseReceiptId, receipt.id));
-
-          return {
-            ...receipt,
-            items,
-          };
-        }),
+      console.log(
+        `✅ Successfully fetched ${receipts.length} purchase receipts`,
       );
-
-      return receiptsWithItems;
+      return receipts as PurchaseReceipt[];
     } catch (error) {
       console.error(`❌ Error in getPurchaseReceipts:`, error);
       return [];
@@ -5524,36 +5335,34 @@ export class DatabaseStorage implements IStorage {
     const database = tenantDb || this.getSafeDatabase("createPurchaseReceipt");
 
     try {
-      console.log("📝 Creating purchase receipt:", receiptData);
+      console.log("🔍 Creating purchase receipt with data:", receiptData);
+      console.log("📦 Processing", items.length, "items");
 
-      // Add storeCode to receipt data
-      const receiptWithStoreCode = {
-        ...receiptData,
-        storeCode: this.storeCode || receiptData.storeCode,
-      };
-
-      // Create the purchase receipt
-      const [newReceipt] = await database
+      // Create the main receipt record
+      const [receipt] = await database
         .insert(purchaseReceipts)
-        .values(receiptWithStoreCode)
+        .values(receiptData)
         .returning();
 
-      console.log("✅ Created purchase receipt:", newReceipt.id);
+      console.log("✅ Purchase receipt created with ID:", receipt.id);
 
-      // Create purchase receipt items if provided
+      // Create receipt items if provided
       if (items && items.length > 0) {
-        const itemsWithReceiptId = items.map((item) => ({
+        const itemsToInsert = items.map((item) => ({
           ...item,
-          purchaseReceiptId: newReceipt.id,
-          storeCode: this.storeCode || item.storeCode,
+          purchaseReceiptId: receipt.id,
         }));
 
-        await database.insert(purchaseReceiptItems).values(itemsWithReceiptId);
+        console.log("📝 Creating", itemsToInsert.length, "receipt items");
+        const insertedItems = await database
+          .insert(purchaseReceiptItems)
+          .values(itemsToInsert)
+          .returning();
 
-        console.log(`✅ Created ${items.length} purchase receipt items`);
+        console.log("✅", insertedItems.length, "receipt items created");
       }
 
-      return newReceipt;
+      return receipt;
     } catch (error) {
       console.error("❌ Error creating purchase receipt:", error);
       throw error;
@@ -5971,14 +5780,11 @@ export class DatabaseStorage implements IStorage {
   async getIncomeVouchers(tenantDb?: any): Promise<any[]> {
     try {
       const database = tenantDb || this.getSafeDatabase("getIncomeVouchers");
-      let query = sql`
-        SELECT * FROM income_vouchers
-      `;
-
-      query = sql`${query} ORDER BY created_at DESC`;
-
-      const result = await database.execute(query);
-      return result.rows || [];
+      const result = await database
+        .select()
+        .from(incomeVouchers)
+        .orderBy(desc(incomeVouchers.createdAt));
+      return result || [];
     } catch (error) {
       console.error("Error fetching income vouchers:", error);
       return [];
@@ -5987,58 +5793,23 @@ export class DatabaseStorage implements IStorage {
 
   async createIncomeVoucher(voucherData: any, tenantDb?: any): Promise<any> {
     const database = tenantDb || this.getSafeDatabase("createIncomeVoucher");
-    try {
-      console.log(
-        "✅ Storage: Creating income voucher with receiverName:",
-        voucherData.receiverName,
-      );
-      console.log(
-        "✅ Storage: Full voucherData:",
-        JSON.stringify(voucherData, null, 2),
-      );
 
-      // Use empty string instead of null for receiverName to avoid SQL syntax issues
-      const receiverName = voucherData.receiverName || "";
+    const [voucher] = await database
+      .insert(incomeVouchers)
+      .values({
+        voucherNumber: voucherData.voucherNumber,
+        date: voucherData.date,
+        amount: voucherData.amount,
+        account: voucherData.account,
+        recipient: voucherData.recipient,
+        receiverName: voucherData.receiverName,
+        phone: voucherData.phone,
+        category: voucherData.category,
+        description: voucherData.description,
+      })
+      .returning();
 
-      console.log("✅ Storage: Using receiverName value:", receiverName);
-      console.log("✅ Storage: receiverName type:", typeof receiverName);
-
-      const result = await database.execute(sql`
-        INSERT INTO income_vouchers (
-          voucher_number, date, amount, account, recipient,
-          receiver_name, phone, category, description, store_code,
-          created_at, updated_at
-        ) VALUES (
-          ${voucherData.voucherNumber},
-          ${voucherData.date},
-          ${voucherData.amount},
-          ${voucherData.account},
-          ${voucherData.recipient},
-          ${receiverName},
-          ${voucherData.phone || ""},
-          ${voucherData.category},
-          ${voucherData.description || ""},
-          ${voucherData.storeCode || ""},
-          NOW(),
-          NOW()
-        ) RETURNING *
-      `);
-
-      const createdVoucher = result.rows[0];
-      console.log(
-        "✅ Storage: Income voucher saved - receiver_name in DB:",
-        createdVoucher.receiver_name,
-      );
-      console.log(
-        "✅ Storage: Full created voucher:",
-        JSON.stringify(createdVoucher, null, 2),
-      );
-
-      return createdVoucher;
-    } catch (error) {
-      console.error("Error creating income voucher:", error);
-      throw error;
-    }
+    return voucher;
   }
 
   async updateIncomeVoucher(
@@ -6112,7 +5883,6 @@ export class DatabaseStorage implements IStorage {
         recipient: voucherData.recipient,
         phone: voucherData.phone || null,
         category: voucherData.category,
-        storeCode: voucherData.storeCode || null,
         description: voucherData.description || null,
       })
       .returning();

@@ -202,15 +202,7 @@ class DatabaseManager {
         isActive: true,
       },
       {
-        subdomain: "laundrydemo-001",
-        databaseUrl:
-          process.env.DATABASE_0108670987 ||
-          process.env.EXTERNAL_DB_0108670987!,
-        storeName: "Store 5 - Cửa hàng 0108670987-008",
-        isActive: true,
-      },
-      {
-        subdomain: "laundrydemo-002",
+        subdomain: "0108670987-admin",
         databaseUrl:
           process.env.DATABASE_0108670987 ||
           process.env.EXTERNAL_DB_0108670987!,
@@ -733,23 +725,6 @@ export async function initializeSampleData() {
       );
     }
 
-    // Update quantity column in order_items table to NUMERIC(8,4)
-    try {
-      await db.execute(sql`
-        ALTER TABLE order_items 
-        ALTER COLUMN quantity TYPE NUMERIC(8,4)
-      `);
-
-      console.log(
-        "Migration for quantity column in order_items table to NUMERIC(8,4) completed successfully.",
-      );
-    } catch (error) {
-      console.log(
-        "Order items quantity column migration failed or already applied:",
-        error,
-      );
-    }
-
     // Add price_include_tax column to orders table
     try {
       await db.execute(sql`
@@ -884,42 +859,6 @@ export async function initializeSampleData() {
       );
     }
 
-    // Initialize order_change_history table if it doesn't exist
-    try {
-      await db.execute(sql`
-        CREATE TABLE IF NOT EXISTS order_change_history (
-          id SERIAL PRIMARY KEY,
-          order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
-          changed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          ip_address VARCHAR(45) NOT NULL,
-          user_id INTEGER,
-          user_name VARCHAR(255) NOT NULL,
-          action VARCHAR(50) NOT NULL DEFAULT 'edit',
-          detailed_description TEXT NOT NULL,
-          store_code VARCHAR(50),
-          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        )
-      `);
-
-      // Create indexes for better performance
-      await db.execute(sql`
-        CREATE INDEX IF NOT EXISTS idx_order_change_history_order_id ON order_change_history(order_id)
-      `);
-      await db.execute(sql`
-        CREATE INDEX IF NOT EXISTS idx_order_change_history_changed_at ON order_change_history(changed_at)
-      `);
-      await db.execute(sql`
-        CREATE INDEX IF NOT EXISTS idx_order_change_history_store_code ON order_change_history(store_code)
-      `);
-
-      console.log("✅ Order change history table initialized successfully");
-    } catch (error) {
-      console.log(
-        "ℹ️ Order change history table already exists or initialization failed:",
-        error,
-      );
-    }
-
     // Add customer phone and tax code to orders table
     try {
       await db.execute(sql`
@@ -947,32 +886,43 @@ export async function initializeSampleData() {
       );
     }
 
-    // Add customerId to orders table
+    // Add domain column to store_settings
     try {
       await db.execute(sql`
-        ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_id INTEGER REFERENCES customers(id)
+        ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS domain TEXT
       `);
 
-      // Create index for better query performance
-      await db.execute(sql`
-        CREATE INDEX IF NOT EXISTS idx_orders_customer_id ON orders(customer_id)
-      `);
-
-      // Update existing orders to link with customers based on phone number
-      await db.execute(sql`
-        UPDATE orders o
-        SET customer_id = c.id
-        FROM customers c
-        WHERE o.customer_phone IS NOT NULL 
-          AND c.phone IS NOT NULL
-          AND o.customer_phone = c.phone
-          AND o.customer_id IS NULL
-      `);
-
-      console.log("✅ customerId column added to orders table successfully");
+      console.log("✅ Domain column added to store_settings successfully");
     } catch (error) {
       console.log(
-        "ℹ️ customerId column already exists or migration completed:",
+        "ℹ️ Domain column already exists or migration completed:",
+        error.message,
+      );
+    }
+
+    // Add isEdit and isCancelled columns to store_settings
+    try {
+      await db.execute(sql`
+        ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS is_edit BOOLEAN NOT NULL DEFAULT false
+      `);
+      await db.execute(sql`
+        ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS is_cancelled BOOLEAN NOT NULL DEFAULT false
+      `);
+
+      // Update existing records to have default values
+      await db.execute(sql`
+        UPDATE store_settings 
+        SET is_edit = COALESCE(is_edit, false),
+            is_cancelled = COALESCE(is_cancelled, false)
+        WHERE is_edit IS NULL OR is_cancelled IS NULL
+      `);
+
+      console.log(
+        "✅ isEdit and isCancelled columns added to store_settings successfully",
+      );
+    } catch (error) {
+      console.log(
+        "ℹ️ isEdit and isCancelled columns already exist or migration completed:",
         error.message,
       );
     }
@@ -1618,11 +1568,13 @@ export async function initializeSampleData() {
         ADD COLUMN IF NOT EXISTS parent TEXT
       `);
 
-      // Add unique constraint to pin_code
+      // Remove unique constraint on pin_code to allow duplicates
       await db.execute(sql`
-        CREATE UNIQUE INDEX IF NOT EXISTS store_settings_pin_code_unique 
-        ON store_settings(pin_code) 
-        WHERE pin_code IS NOT NULL AND pin_code != ''
+        DROP INDEX IF EXISTS store_settings_pin_code_unique
+      `);
+
+      await db.execute(sql`
+        DROP INDEX IF EXISTS store_settings_pin_code_unique_idx
       `);
 
       // Add typeUser column
@@ -2590,18 +2542,54 @@ export async function initializeSampleData() {
       );
     }
 
-    // Add domain column to store_settings table
+    // Add price_list_id column to store_settings
     try {
       await db.execute(sql`
         ALTER TABLE store_settings 
-        ADD COLUMN IF NOT EXISTS domain TEXT
+        ADD COLUMN IF NOT EXISTS price_list_id INTEGER REFERENCES price_lists(id)
+      `);
+
+      // Create index for price_list_id
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS idx_store_settings_price_list_id 
+        ON store_settings(price_list_id)
       `);
 
       console.log(
-        "Migration for domain column in store_settings completed successfully.",
+        "Migration for price_list_id column in store_settings completed successfully.",
       );
     } catch (error) {
-      console.log("Domain column migration already applied or error:", error);
+      console.log("Price list ID migration already applied or error:", error);
+    }
+
+    // Add store_code to price_lists and price_list_items tables
+    try {
+      await db.execute(sql`
+        ALTER TABLE price_lists 
+        ADD COLUMN IF NOT EXISTS store_code VARCHAR(50)
+      `);
+
+      await db.execute(sql`
+        ALTER TABLE price_list_items 
+        ADD COLUMN IF NOT EXISTS store_code VARCHAR(50)
+      `);
+
+      // Create indexes for better performance
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS idx_price_lists_store_code ON price_lists(store_code)
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS idx_price_list_items_store_code ON price_list_items(store_code)
+      `);
+
+      console.log(
+        "Migration for store_code columns in price_lists tables completed successfully.",
+      );
+    } catch (error) {
+      console.log(
+        "Price lists store_code migration already applied or error:",
+        error,
+      );
     }
 
     // Create general_settings table
@@ -2637,26 +2625,6 @@ export async function initializeSampleData() {
         "General settings table already exists or initialization failed:",
         error,
       );
-    }
-
-    // Add price_list_id column to store_settings
-    try {
-      await db.execute(sql`
-        ALTER TABLE store_settings 
-        ADD COLUMN IF NOT EXISTS price_list_id INTEGER REFERENCES price_lists(id)
-      `);
-
-      // Create index for price_list_id
-      await db.execute(sql`
-        CREATE INDEX IF NOT EXISTS idx_store_settings_price_list_id 
-        ON store_settings(price_list_id)
-      `);
-
-      console.log(
-        "Migration for price_list_id column in store_settings completed successfully.",
-      );
-    } catch (error) {
-      console.log("Price list ID migration already applied or error:", error);
     }
 
     console.log("✅ Database setup completed successfully");
